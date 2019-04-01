@@ -25,6 +25,8 @@ import modeling
 import optimization
 import tokenization
 import tensorflow as tf
+import pandas as pd
+import numpy as np
 
 flags = tf.flags
 
@@ -252,6 +254,48 @@ class XnliProcessor(DataProcessor):
     return ["contradiction", "entailment", "neutral"]
 
 
+class QuoraProcessor(DataProcessor):
+  """Processor for the Quora data set."""
+
+  def __init__(self):
+    self.language = "en"
+    df = pd.read_csv('train.csv')
+    # shuffle and split by 8:1:1
+    count = len(df)
+    self.train, self.dev, self.test = np.split(df.sample(frac=1).reset_index(drop=True), 
+                                               [int(0.8 * count), int(0.9 * count)])
+
+  def get_examples(self, dataframe, data_dir):
+    examples = []
+    for index, row in dataframe.iterrows():
+      guid = row["id"]
+      try:
+        text_a = tokenization.convert_to_unicode(row["question1"])
+        text_b = tokenization.convert_to_unicode(row["question2"])
+        label = row["is_duplicate"]
+        examples.append(InputExample(guid=guid, text_a=text_a, 
+                                     text_b=text_b, label=label))
+      except Exception as e:
+        print("wrong guid %s content:%s" % (str(guid), row))
+    return examples
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self.get_examples(self.train, data_dir)
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self.get_examples(self.dev, data_dir)
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self.get_examples(self.test, data_dir)
+
+  def get_labels(self):
+    """See base class."""
+    return [0, 1]
+
+
 class MnliProcessor(DataProcessor):
   """Processor for the MultiNLI data set (GLUE version)."""
 
@@ -455,7 +499,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
   assert len(input_ids) == max_seq_length
   assert len(input_mask) == max_seq_length
   assert len(segment_ids) == max_seq_length
-
+  
   label_id = label_map[example.label]
   if ex_index < 5:
     tf.logging.info("*** Example ***")
@@ -788,6 +832,7 @@ def main(_):
       "mnli": MnliProcessor,
       "mrpc": MrpcProcessor,
       "xnli": XnliProcessor,
+      "quora": QuoraProcessor
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
